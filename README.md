@@ -6,8 +6,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0">
-  <img src="https://img.shields.io/badge/rust-2021-orange.svg" alt="Rust 2021">
-  <img src="https://img.shields.io/badge/status-alpha-yellow.svg" alt="Status: alpha">
+  <img src="https://img.shields.io/badge/rust-1.88%2B-orange.svg" alt="Rust 1.88+">
+  <img src="https://img.shields.io/badge/status-beta-green.svg" alt="Status: beta">
 </p>
 
 ---
@@ -44,19 +44,22 @@ auth in `indexer-agent`, a token field in `indexer-tools`) is pursued upstream.
 ## Features
 
 - 🔑 **Authentication** — static bearer tokens (constant-time comparison), JWT
-  (HS256 today, JWKS/RS256/ES256 ready), and mTLS subject/SAN → principal mapping.
+  (HS256, plus RS256/ES256 via JWKS), and mTLS subject/SAN → principal mapping.
 - 🛡️ **GraphQL-aware authorization** — the body is *parsed, never executed*; a
   `mutation` root is a `write`, `query`/`subscription` a `read`. Aliases resolve
   to real field names and fragments are expanded, so neither can mask a gated
   field. Policy can demand fine-grained scopes (e.g. `actions:execute`) per field
   or named operation.
+- 🔒 **TLS & mTLS** — optional TLS termination (`rustls`); mTLS verifies client
+  certificates against a CA and maps them to principals.
 - 📓 **Audit trail** — every write (optionally every read) is one structured JSON
   line: principal, source IP, operation, hashed variables, upstream status, and
   latency.
 - 🚦 **Rate limiting** — separate per-principal read/write budgets.
-- 📈 **Observability** — Prometheus metrics on `:7300`.
-- 🪶 **Drop-in & stateless** — a single static binary; horizontally scalable;
-  trivially deployable as a sidecar.
+- 📈 **Observability** — Prometheus metrics on `:7300`; `/healthz` + `/readyz`
+  probes.
+- 🪶 **Drop-in & stateless** — a single static binary (distroless image ~59 MB);
+  horizontally scalable; trivially deployable as a sidecar.
 
 ## Architecture
 
