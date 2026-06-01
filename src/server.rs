@@ -16,7 +16,7 @@ use axum::Router;
 use http::{header, HeaderMap, Method, StatusCode};
 
 use crate::audit::{hash_variables, now_rfc3339, AuditRecord, AuditSink, Outcome};
-use crate::auth::{Authenticator, Credentials};
+use crate::auth::{Authenticator, ClientCert, Credentials};
 use crate::authz::authorize;
 use crate::classify::{classify, Classification, OperationInfo, Scope};
 use crate::config::{Config, Policy};
@@ -118,12 +118,14 @@ async fn handle(
         .unwrap_or_else(|| parts.uri.path().to_string());
     let headers = parts.headers;
     let source_ip = peer.ip().to_string();
+    // Present only when the TLS layer terminated an mTLS connection.
+    let client_cert = parts.extensions.get::<ClientCert>().cloned();
 
     // --- 1. Authentication ------------------------------------------------
     let bearer = extract_bearer(&headers);
     let creds = Credentials {
         bearer,
-        client_cert: None, // populated by the TLS layer when mTLS is enabled
+        client_cert,
     };
     let principal = match state
         .authenticator

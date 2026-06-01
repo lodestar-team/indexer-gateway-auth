@@ -18,6 +18,7 @@ enabled             = false
 # cert              = "/etc/iga/tls/cert.pem"
 # key               = "/etc/iga/tls/key.pem"
 require_client_cert = false        # set true for mTLS
+# client_ca         = "/etc/iga/tls/client-ca.pem"  # required when require_client_cert = true
 
 [auth]
 mode                 = "bearer"    # "bearer" | "jwt" | "mtls"
@@ -32,6 +33,12 @@ scopes = ["read"]
 name   = "operator"
 token  = "env:IGA_TOKEN_OPERATOR"
 scopes = ["read", "write"]
+
+# Certificate-subject → principal mappings (used when mode = "mtls").
+# [[auth.mtls]]
+# subject = "operator.indexer.eth"   # matched against the client cert CN or a SAN
+# name    = "operator"
+# scopes  = ["read", "write"]
 
 # Optional JWT backend (used when mode = "jwt").
 # [auth.jwt]

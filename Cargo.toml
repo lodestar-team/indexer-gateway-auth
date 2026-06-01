@@ -44,6 +44,15 @@ http = "1"
 http-body-util = "0.1"
 bytes = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "http2"] }
+hyper = { version = "1", features = ["server", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["server", "server-auto", "tokio"] }
+tower = { version = "0.5", features = ["util"] }
+
+# TLS / mTLS
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+rustls-pemfile = "2"
+x509-parser = "0.16"
 
 # Rate limiting
 governor = "0.6"
@@ -59,3 +68,4 @@ anyhow = "1"
 thiserror = "2"
 
 [dev-dependencies]
+rcgen = "0.13"

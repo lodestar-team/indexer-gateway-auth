@@ -54,6 +54,10 @@ pub struct Tls {
     /// Require and verify a client certificate (mTLS).
     #[serde(default)]
     pub require_client_cert: bool,
+    /// PEM bundle of CA certificate(s) that client certificates must chain to.
+    /// Required when `require_client_cert` is true.
+    #[serde(default)]
+    pub client_ca: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]

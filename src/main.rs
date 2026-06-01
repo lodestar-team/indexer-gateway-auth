@@ -52,15 +52,32 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(config.listen)
         .await
         .with_context(|| format!("binding listener on {}", config.listen))?;
-    tracing::info!(listen = %config.listen, "indexer-gateway-auth listening");
 
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .await
-    .context("server error")?;
+    if config.tls.enabled {
+        let tls_config =
+            iga::tls::load_server_config(&config.tls).context("loading TLS configuration")?;
+        let mtls = if config.tls.require_client_cert {
+            " (mTLS)"
+        } else {
+            ""
+        };
+        tracing::info!(listen = %config.listen, "indexer-gateway-auth listening over TLS{mtls}");
+        iga::tls::serve(listener, tls_config, app, shutdown_signal())
+            .await
+            .context("TLS server error")?;
+    } else {
+        tracing::warn!(
+            listen = %config.listen,
+            "indexer-gateway-auth listening WITHOUT TLS — enable [tls] before exposing beyond localhost"
+        );
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .context("server error")?;
+    }
 
     Ok(())
 }

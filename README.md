@@ -176,6 +176,29 @@ to `graph-node` (the prefix is stripped before forwarding):
 | `/_admin/...` | `upstream.graph_node_admin` (`:8020`) — JSON-RPC, treated as `write` |
 | `/_status/...` | `upstream.graph_node_status` (`:8030`) |
 
+## TLS & mTLS
+
+Enable TLS termination in `[tls]`. With `require_client_cert`, the proxy demands
+a client certificate that chains to `client_ca`, extracts its CN/SANs, and maps
+that identity to a principal via `[[auth.mtls]]`:
+
+```toml
+[tls]
+enabled             = true
+cert                = "/etc/iga/tls/cert.pem"
+key                 = "/etc/iga/tls/key.pem"
+require_client_cert = true
+client_ca           = "/etc/iga/tls/client-ca.pem"
+
+[auth]
+mode = "mtls"
+
+[[auth.mtls]]
+subject = "operator.indexer.eth"   # client cert CN or SAN
+name    = "operator"
+scopes  = ["read", "write"]
+```
+
 ## Audit log
 
 Each audited request is a single JSON line (variables are hashed by default;
@@ -250,7 +273,7 @@ cargo fmt --check
 - [x] `axum` service + graceful shutdown; integration-tested against a mock upstream
 - [x] Rate limiting — per-principal, per-scope (`governor`)
 - [x] Prometheus metrics endpoint (`:7300`)
-- [ ] TLS termination + mTLS client-certificate extraction
+- [x] TLS termination + mTLS client-certificate extraction (`rustls`); end-to-end handshake tested
 - [ ] `cargo-fuzz` target on the classifier
 
 ## Upstream / contribution path
