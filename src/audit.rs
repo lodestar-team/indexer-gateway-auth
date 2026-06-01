@@ -29,6 +29,8 @@ pub enum Outcome {
     Denied { reason: String },
     /// Body could not be classified and was rejected (`400`).
     Rejected { reason: String },
+    /// Rejected for exceeding the scope's rate budget (`429`).
+    RateLimited,
 }
 
 /// One audit record. Optional fields are omitted from the JSON when absent.

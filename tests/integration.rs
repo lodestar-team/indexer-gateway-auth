@@ -58,6 +58,11 @@ async fn spawn_upstream() -> (SocketAddr, Arc<Mutex<Vec<Recorded>>>) {
 
 /// Spawn the gateway pointed at `upstream`, returning its address.
 async fn spawn_gateway(upstream: SocketAddr, audit: AuditSink) -> SocketAddr {
+    spawn_gateway_with(upstream, audit, "").await
+}
+
+/// Spawn the gateway with extra TOML appended (e.g. a `[ratelimit]` section).
+async fn spawn_gateway_with(upstream: SocketAddr, audit: AuditSink, extra: &str) -> SocketAddr {
     let toml = format!(
         r#"
 listen = "127.0.0.1:0"
@@ -76,6 +81,7 @@ token = "write-token"
 scopes = ["read", "write"]
 [policy]
 fail_closed_on_parse_error = true
+{extra}
 "#
     );
     let config = Config::from_toml_str(&toml).unwrap();
@@ -205,6 +211,37 @@ async fn malformed_body_fails_closed() {
     let resp = post_graphql(gateway, Some("write-token"), "this is not graphql json").await;
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     assert!(records.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn write_rate_limit_returns_429() {
+    let (upstream, records) = spawn_upstream().await;
+    // One write per minute; reads unrestricted.
+    let gateway = spawn_gateway_with(
+        upstream,
+        AuditSink::Null,
+        "[ratelimit]\nwrite_per_minute = 1\nread_per_minute = 0",
+    )
+    .await;
+
+    let mutation = r#"{"query":"mutation { setIndexingRule(rule: {}) { id } }"}"#;
+    let first = post_graphql(gateway, Some("write-token"), mutation).await;
+    assert_eq!(first.status(), StatusCode::OK);
+
+    let second = post_graphql(gateway, Some("write-token"), mutation).await;
+    assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    // Reads are on a separate (unlimited) budget and still succeed.
+    let read = post_graphql(
+        gateway,
+        Some("read-token"),
+        r#"{"query":"{ indexingRules { id } }"}"#,
+    )
+    .await;
+    assert_eq!(read.status(), StatusCode::OK);
+
+    // Only the two allowed requests reached the upstream.
+    assert_eq!(records.lock().unwrap().len(), 2);
 }
 
 #[tokio::test]

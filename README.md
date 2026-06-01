@@ -53,8 +53,8 @@ auth in `indexer-agent`, a token field in `indexer-tools`) is pursued upstream.
 - 📓 **Audit trail** — every write (optionally every read) is one structured JSON
   line: principal, source IP, operation, hashed variables, upstream status, and
   latency.
-- 🚦 **Rate limiting** — separate read/write budgets *(in progress)*.
-- 📈 **Observability** — Prometheus metrics on `:7300` *(in progress)*.
+- 🚦 **Rate limiting** — separate per-principal read/write budgets.
+- 📈 **Observability** — Prometheus metrics on `:7300`.
 - 🪶 **Drop-in & stateless** — a single static binary; horizontally scalable;
   trivially deployable as a sidecar.
 
@@ -248,9 +248,9 @@ cargo fmt --check
 - [x] Audit logging — structured JSON line, hashed variables, pluggable sink
 - [x] Pass-through proxy — `reqwest`, route-aware, hop-by-hop + `Authorization` stripped
 - [x] `axum` service + graceful shutdown; integration-tested against a mock upstream
+- [x] Rate limiting — per-principal, per-scope (`governor`)
+- [x] Prometheus metrics endpoint (`:7300`)
 - [ ] TLS termination + mTLS client-certificate extraction
-- [ ] Rate limiting (`tower_governor`)
-- [ ] Prometheus metrics endpoint (`:7300`)
 - [ ] `cargo-fuzz` target on the classifier
 
 ## Upstream / contribution path

@@ -20,8 +20,10 @@ use crate::auth::{Authenticator, Credentials};
 use crate::authz::authorize;
 use crate::classify::{classify, Classification, OperationInfo, Scope};
 use crate::config::{Config, Policy};
+use crate::metrics;
 use crate::principal::Principal;
 use crate::proxy::{filter_response_headers, route, Proxy, ProxyError, UpstreamTarget};
+use crate::ratelimit::RateLimiters;
 
 /// Shared, cheaply-cloneable application state.
 #[derive(Clone)]
@@ -34,6 +36,7 @@ struct Inner {
     policy: Policy,
     proxy: Proxy,
     audit: AuditSink,
+    rate_limiters: RateLimiters,
     allow_anonymous_read: bool,
     fail_closed_on_parse_error: bool,
     /// Audit reads as well as writes (writes are always audited).
@@ -79,6 +82,10 @@ impl AppState {
                 policy: config.policy.clone(),
                 proxy,
                 audit,
+                rate_limiters: RateLimiters::new(
+                    config.ratelimit.read_per_minute,
+                    config.ratelimit.write_per_minute,
+                ),
                 allow_anonymous_read: config.auth.allow_anonymous_read,
                 fail_closed_on_parse_error: config.policy.fail_closed_on_parse_error,
                 audit_reads: options.audit_reads,
@@ -140,6 +147,7 @@ async fn handle(
                 upstream_status: None,
                 latency_ms: None,
             });
+            metrics::inc_auth_failure();
             return error_response(StatusCode::UNAUTHORIZED, "unauthorized", true);
         }
     };
@@ -175,6 +183,7 @@ async fn handle(
                     reason: reason.clone(),
                 },
             );
+            metrics::inc_parse_error();
             return error_response(StatusCode::BAD_REQUEST, &reason, false);
         }
     };
@@ -190,7 +199,24 @@ async fn handle(
                 reason: denied.to_string(),
             },
         );
+        metrics::inc_authz_denied();
         return error_response(StatusCode::FORBIDDEN, &denied.to_string(), false);
+    }
+
+    // --- 4b. Rate limiting (per principal, per scope) ---------------------
+    if !state
+        .rate_limiters
+        .check(classification.scope, &principal.name)
+    {
+        audit_pre_upstream(
+            &state,
+            &principal,
+            &source_ip,
+            Some(&classification),
+            Outcome::RateLimited,
+        );
+        metrics::inc_rate_limited();
+        return error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded", false);
     }
 
     // --- 5. Proxy & audit -------------------------------------------------
@@ -203,8 +229,13 @@ async fn handle(
         .await;
     let latency_ms = started.elapsed().as_millis() as u64;
 
+    let scope_label = scope_str(classification.scope);
+    let latency_seconds = latency_ms as f64 / 1000.0;
+
     match result {
         Ok(upstream) => {
+            let status = upstream.status.as_u16();
+            metrics::record_request(scope_label, &principal.name, status, latency_seconds);
             let should_audit = classification.scope == Scope::Write || state.audit_reads;
             if should_audit {
                 state.audit.emit(&AuditRecord {
@@ -229,6 +260,12 @@ async fn handle(
                 ProxyError::NoUpstream(_) => StatusCode::NOT_FOUND,
                 _ => StatusCode::BAD_GATEWAY,
             };
+            metrics::record_request(
+                scope_label,
+                &principal.name,
+                status.as_u16(),
+                latency_seconds,
+            );
             state.audit.emit(&AuditRecord {
                 timestamp: now_rfc3339(),
                 principal: principal.name.clone(),
@@ -291,6 +328,13 @@ fn write_only() -> Classification {
     Classification {
         operations: vec![],
         scope: Scope::Write,
+    }
+}
+
+fn scope_str(scope: Scope) -> &'static str {
+    match scope {
+        Scope::Read => "read",
+        Scope::Write => "write",
     }
 }
 

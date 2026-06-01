@@ -27,6 +27,16 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::load(&config_path)
         .with_context(|| format!("loading config from {}", config_path.display()))?;
 
+    // Install the Prometheus recorder before any metric is recorded, then serve
+    // it on the dedicated metrics address.
+    let metrics_handle = iga::metrics::install_recorder()?;
+    let metrics_addr = config.metrics;
+    tokio::spawn(async move {
+        if let Err(e) = iga::metrics::serve(metrics_addr, metrics_handle).await {
+            tracing::error!(error = %e, "metrics server stopped");
+        }
+    });
+
     let authenticator = Authenticator::from_config(&config.auth)
         .map_err(|e| anyhow::anyhow!("authenticator: {e}"))?;
 

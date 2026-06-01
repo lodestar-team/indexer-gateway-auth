@@ -10,6 +10,8 @@ pub mod auth;
 pub mod authz;
 pub mod classify;
 pub mod config;
+pub mod metrics;
 pub mod principal;
 pub mod proxy;
+pub mod ratelimit;
 pub mod server;
