@@ -1,0 +1,11 @@
+target
+.git
+.github
+charts
+fuzz
+tests
+*.md
+*.pem
+*.key
+.env
+.DS_Store

@@ -2,7 +2,7 @@
 name = "indexer-gateway-auth"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.88"
 description = "Authenticating reverse proxy for the Graph Protocol Indexer Management API"
 license = "Apache-2.0"
 repository = "https://github.com/lodestar-team/indexer-gateway-auth"
@@ -43,7 +43,7 @@ axum = { version = "0.8", default-features = false, features = ["tokio", "http1"
 http = "1"
 http-body-util = "0.1"
 bytes = "1"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "http2"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "http2", "json"] }
 hyper = { version = "1", features = ["server", "http1", "http2"] }
 hyper-util = { version = "0.1", features = ["server", "server-auto", "tokio"] }
 tower = { version = "0.5", features = ["util"] }

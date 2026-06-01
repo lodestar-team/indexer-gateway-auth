@@ -362,6 +362,47 @@ mod tests {
     }
 
     #[test]
+    fn cyclic_fragments_terminate() {
+        // The visited-set guard must stop a fragment cycle from looping forever.
+        let c = classify(&q("query { ...A } \
+             fragment A on Query { fieldA ...B } \
+             fragment B on Query { fieldB ...A }"))
+        .unwrap();
+        assert_eq!(c.scope, Scope::Read);
+        assert!(c.operations[0]
+            .top_level_fields
+            .contains(&"fieldA".to_string()));
+        assert!(c.operations[0]
+            .top_level_fields
+            .contains(&"fieldB".to_string()));
+    }
+
+    #[test]
+    fn robustness_never_panics_on_hostile_input() {
+        // None of these should panic; each must yield Ok or a ClassifyError.
+        let cases: &[&[u8]] = &[
+            b"",
+            b"{}",
+            b"[]",
+            b"null",
+            b"\xff\xfe\x00\x01",         // invalid utf-8 / control bytes
+            br#"{"query": ""}"#,         // empty query
+            br#"{"query": "{"}"#,        // truncated
+            br#"{"query": "mutation"}"#, // keyword only
+            br#"{"query": "{a{a{a{a{a{a{a{a}}}}}}}}"}"#, // deep nesting
+            br#"{"query": "query ( ( ( ( ("}"#, // junk
+            br#"{"query": "{ a: x b: x c: x a: x }"}"#, // repeated aliases
+            br#"[{"query":"{x}"},{"query":"mutation{y}"},{"query":"garbage"}]"#,
+            br#"{"query": 12345}"#,       // wrong type
+            br#"{"operationName": "x"}"#, // missing query
+        ];
+        for case in cases {
+            // The assertion is simply that this returns rather than panics.
+            let _ = classify(case);
+        }
+    }
+
+    #[test]
     fn fragment_only_document_has_no_operation() {
         let err = classify(&q("fragment M on Mutation { queueActions { id } }")).unwrap_err();
         // async-graphql rejects an operation-less document at parse time.

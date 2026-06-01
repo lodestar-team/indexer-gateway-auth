@@ -1,0 +1,77 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/lodestar-team/indexer-gateway-auth
+  # Defaults to the chart appVersion when empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# The proxy configuration, rendered verbatim into /etc/iga/config.toml.
+# Secret token values MUST be referenced as env:NAME and supplied via
+# `existingSecret` below — never inline real tokens here.
+config: |
+  listen  = "0.0.0.0:8400"
+  metrics = "0.0.0.0:7300"
+
+  [upstream]
+  agent_management = "http://indexer-agent:8000"
+
+  [auth]
+  mode = "bearer"
+
+  [[auth.tokens]]
+  name   = "operator"
+  token  = "env:IGA_TOKEN_OPERATOR"
+  scopes = ["read", "write"]
+
+  [policy]
+  fail_closed_on_parse_error = true
+
+  [ratelimit]
+  write_per_minute = 30
+  read_per_minute  = 600
+
+# Name of an existing Secret whose keys are exported as environment variables
+# (e.g. IGA_TOKEN_OPERATOR), resolving the env: references in `config`.
+existingSecret: ""
+
+service:
+  type: ClusterIP
+  port: 8400
+  metricsPort: 7300
+
+# Liveness/readiness probes hit the unauthenticated /healthz and /readyz routes.
+probes:
+  enabled: true
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 32Mi
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

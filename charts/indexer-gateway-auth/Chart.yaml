@@ -1,0 +1,16 @@
+apiVersion: v2
+name: indexer-gateway-auth
+description: Authenticating reverse proxy for the Graph Protocol Indexer Management API
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/lodestar-team/indexer-gateway-auth
+sources:
+  - https://github.com/lodestar-team/indexer-gateway-auth
+keywords:
+  - graphprotocol
+  - indexer
+  - proxy
+  - auth
+maintainers:
+  - name: Petko Pavlovski

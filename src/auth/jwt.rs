@@ -5,6 +5,7 @@
 //! build synchronously from config; RS256/ES256 verification keys fetched from a
 //! JWKS endpoint are supplied at async startup via [`JwtBackend::with_keys`].
 
+use jsonwebtoken::jwk::JwkSet;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde_json::Value;
 
@@ -47,6 +48,12 @@ impl JwtBackend {
         }
     }
 
+    /// Build from an already-fetched JWKS document (RS256/ES256).
+    pub fn from_jwks(cfg: &JwtConfig, set: &JwkSet) -> Result<Self, AuthError> {
+        let (keys, algorithm) = keys_from_jwks(set)?;
+        Ok(JwtBackend::with_keys(cfg, keys, algorithm))
+    }
+
     pub fn verify(&self, token: &str) -> Result<Principal, AuthError> {
         let mut last_err: Option<jsonwebtoken::errors::Error> = None;
         for key in &self.keys {
@@ -71,6 +78,64 @@ impl JwtBackend {
         let scopes = extract_scopes(claims, &self.scopes_claim);
         Principal::new(name, scopes)
     }
+}
+
+/// Fetch a JWKS document over HTTP.
+pub async fn fetch_jwks(client: &reqwest::Client, url: &str) -> Result<JwkSet, AuthError> {
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| AuthError::Jwt(format!("fetching JWKS from {url}: {e}")))?;
+    response
+        .json::<JwkSet>()
+        .await
+        .map_err(|e| AuthError::Jwt(format!("parsing JWKS from {url}: {e}")))
+}
+
+/// Build decoding keys from a JWKS, returning the algorithm advertised by the
+/// keys. All keys must advertise the same family; the first key's `alg` is used.
+fn keys_from_jwks(set: &JwkSet) -> Result<(Vec<DecodingKey>, Algorithm), AuthError> {
+    if set.keys.is_empty() {
+        return Err(AuthError::Jwt("JWKS contained no keys".into()));
+    }
+    let mut keys = Vec::with_capacity(set.keys.len());
+    let mut algorithm = None;
+    for jwk in &set.keys {
+        let key =
+            DecodingKey::from_jwk(jwk).map_err(|e| AuthError::Jwt(format!("invalid JWK: {e}")))?;
+        keys.push(key);
+        if algorithm.is_none() {
+            algorithm = jwk
+                .common
+                .key_algorithm
+                .and_then(key_algorithm_to_algorithm);
+        }
+    }
+    let algorithm =
+        algorithm.ok_or_else(|| AuthError::Jwt("JWKS keys do not advertise an 'alg'".into()))?;
+    Ok((keys, algorithm))
+}
+
+/// Map a JWK `alg` to the verification algorithm. (`jsonwebtoken`'s own
+/// conversion is private, so we mirror it here.)
+fn key_algorithm_to_algorithm(ka: jsonwebtoken::jwk::KeyAlgorithm) -> Option<Algorithm> {
+    use jsonwebtoken::jwk::KeyAlgorithm as K;
+    Some(match ka {
+        K::HS256 => Algorithm::HS256,
+        K::HS384 => Algorithm::HS384,
+        K::HS512 => Algorithm::HS512,
+        K::ES256 => Algorithm::ES256,
+        K::ES384 => Algorithm::ES384,
+        K::RS256 => Algorithm::RS256,
+        K::RS384 => Algorithm::RS384,
+        K::RS512 => Algorithm::RS512,
+        K::PS256 => Algorithm::PS256,
+        K::PS384 => Algorithm::PS384,
+        K::PS512 => Algorithm::PS512,
+        K::EdDSA => Algorithm::EdDSA,
+        _ => return None,
+    })
 }
 
 fn build_validation(cfg: &JwtConfig, algorithm: Algorithm) -> Validation {
@@ -198,6 +263,33 @@ mod tests {
         let backend = JwtBackend::from_config(&config()).unwrap();
         let p = backend.verify(&token).unwrap();
         assert!(p.scopes.is_empty());
+    }
+
+    #[test]
+    fn builds_keys_and_detects_algorithm_from_jwks() {
+        // RFC 7517 §A.1 sample RSA public key, tagged RS256.
+        let jwks: JwkSet = serde_json::from_value(json!({
+            "keys": [{
+                "kty": "RSA",
+                "n": "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw",
+                "e": "AQAB",
+                "alg": "RS256",
+                "kid": "test-key",
+            }]
+        }))
+        .unwrap();
+        let backend = JwtBackend::from_jwks(&config(), &jwks).expect("builds from JWKS");
+        assert_eq!(backend.keys.len(), 1);
+        assert_eq!(backend.validation.algorithms, vec![Algorithm::RS256]);
+    }
+
+    #[test]
+    fn empty_jwks_is_rejected() {
+        let jwks: JwkSet = serde_json::from_value(json!({ "keys": [] })).unwrap();
+        assert!(matches!(
+            JwtBackend::from_jwks(&config(), &jwks),
+            Err(AuthError::Jwt(_))
+        ));
     }
 
     #[test]

@@ -99,8 +99,19 @@ impl AppState {
 /// Build the axum router for the proxy. Bind with
 /// `.into_make_service_with_connect_info::<SocketAddr>()` so the source IP is
 /// available for audit.
+///
+/// `/healthz` and `/readyz` are unauthenticated liveness/readiness probes for
+/// orchestrators; every other path falls through to the authenticated pipeline.
 pub fn build_router(state: AppState) -> Router {
-    Router::new().fallback(handle).with_state(state)
+    Router::new()
+        .route("/healthz", axum::routing::get(health))
+        .route("/readyz", axum::routing::get(health))
+        .fallback(handle)
+        .with_state(state)
+}
+
+async fn health() -> &'static str {
+    "ok"
 }
 
 async fn handle(

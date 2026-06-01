@@ -1,0 +1,24 @@
+indexer-gateway-auth is deployed.
+
+The proxy is reachable in-cluster at:
+  http://{{ include "iga.fullname" . }}:{{ .Values.service.port }}
+Prometheus metrics:
+  http://{{ include "iga.fullname" . }}:{{ .Values.service.metricsPort }}/metrics
+
+Point your indexer tooling (indexer-tools-v3, the Indexer CLI) at the proxy
+instead of the agent, and supply a bearer token via the Authorization header.
+
+{{- if not .Values.existingSecret }}
+
+WARNING: `existingSecret` is not set. The default config references
+`env:IGA_TOKEN_OPERATOR`, which will be unset and cause startup to fail. Create a
+Secret with your token(s) and set `existingSecret` to its name:
+
+  kubectl create secret generic iga-tokens \
+    --from-literal=IGA_TOKEN_OPERATOR="$(openssl rand -hex 32)"
+
+  helm upgrade --install ... --set existingSecret=iga-tokens
+{{- end }}
+
+Remember: bind the upstream agent to a cluster-internal address so this proxy is
+its only reachable network path.

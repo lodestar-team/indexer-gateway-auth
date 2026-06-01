@@ -254,12 +254,45 @@ committed config.
 - TLS should be enabled whenever the proxy is reachable beyond `localhost`; mTLS
   is recommended for zero-trust setups.
 
+## Deployment
+
+### Docker
+
+A minimal distroless image is built from the included `Dockerfile` (runs as a
+non-root user, no shell):
+
+```sh
+docker build -t indexer-gateway-auth .
+docker run --rm -p 8400:8400 -p 7300:7300 \
+  -e IGA_TOKEN_OPERATOR="$(openssl rand -hex 32)" \
+  -v "$PWD/config.toml:/etc/iga/config.toml:ro" \
+  indexer-gateway-auth
+```
+
+### Helm
+
+A chart is provided under [`charts/indexer-gateway-auth`](charts/indexer-gateway-auth).
+It deploys the proxy with liveness/readiness probes wired to `/healthz` and
+`/readyz`, config from a `ConfigMap`, and tokens sourced from an existing Secret:
+
+```sh
+kubectl create secret generic iga-tokens \
+  --from-literal=IGA_TOKEN_OPERATOR="$(openssl rand -hex 32)"
+
+helm install iga ./charts/indexer-gateway-auth \
+  --set existingSecret=iga-tokens
+```
+
+Bind the upstream agent to a cluster-internal address so the proxy is its only
+reachable network path.
+
 ## Development
 
 ```sh
 cargo test            # unit + integration tests
 cargo clippy --all-targets
 cargo fmt --check
+cargo +nightly fuzz run classify   # fuzz the classifier (needs cargo-fuzz)
 ```
 
 ## Roadmap
@@ -274,7 +307,9 @@ cargo fmt --check
 - [x] Rate limiting — per-principal, per-scope (`governor`)
 - [x] Prometheus metrics endpoint (`:7300`)
 - [x] TLS termination + mTLS client-certificate extraction (`rustls`); end-to-end handshake tested
-- [ ] `cargo-fuzz` target on the classifier
+- [x] Health/readiness probes, JWKS (RS256/ES256) JWT verification
+- [x] Distroless Docker image, Helm chart, CI (fmt/clippy/test/docker)
+- [x] `cargo-fuzz` target on the classifier (+ in-tree robustness test)
 
 ## Upstream / contribution path
 

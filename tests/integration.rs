@@ -214,6 +214,26 @@ async fn malformed_body_fails_closed() {
 }
 
 #[tokio::test]
+async fn health_endpoints_need_no_auth_and_skip_upstream() {
+    let (upstream, records) = spawn_upstream().await;
+    let gateway = spawn_gateway(upstream, AuditSink::Null).await;
+
+    for path in ["/healthz", "/readyz"] {
+        let resp = reqwest::Client::new()
+            .get(format!("http://{gateway}{path}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "{path}");
+        assert_eq!(resp.text().await.unwrap(), "ok");
+    }
+    assert!(
+        records.lock().unwrap().is_empty(),
+        "probes must not be proxied upstream"
+    );
+}
+
+#[tokio::test]
 async fn write_rate_limit_returns_429() {
     let (upstream, records) = spawn_upstream().await;
     // One write per minute; reads unrestricted.

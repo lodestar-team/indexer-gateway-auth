@@ -10,7 +10,7 @@ mod jwt;
 mod mtls;
 mod token;
 
-pub use jwt::JwtBackend;
+pub use jwt::{fetch_jwks, JwtBackend};
 pub use mtls::{ClientCert, MtlsBackend};
 pub use token::StaticTokenBackend;
 

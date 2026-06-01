@@ -37,12 +37,12 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let authenticator = Authenticator::from_config(&config.auth)
-        .map_err(|e| anyhow::anyhow!("authenticator: {e}"))?;
-
     let client = reqwest::Client::builder()
         .build()
-        .context("building upstream HTTP client")?;
+        .context("building HTTP client")?;
+
+    let authenticator = build_authenticator(&config, &client).await?;
+
     let proxy = Proxy::new(client, &config.upstream);
 
     let audit = AuditSink::Stdout;
@@ -80,6 +80,35 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Build the authenticator, fetching JWKS keys asynchronously when the JWT
+/// backend is configured with a `jwks_url` (and no static HS256 secret).
+async fn build_authenticator(
+    config: &Config,
+    client: &reqwest::Client,
+) -> anyhow::Result<Authenticator> {
+    use iga::config::AuthMode;
+
+    if config.auth.mode == AuthMode::Jwt {
+        if let Some(jwt) = &config.auth.jwt {
+            if jwt.hs256_secret.is_none() {
+                let url = jwt
+                    .jwks_url
+                    .as_ref()
+                    .context("JWT mode requires either hs256_secret or jwks_url")?;
+                tracing::info!(%url, "fetching JWKS for JWT verification");
+                let set = iga::auth::fetch_jwks(client, url)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
+                let backend = iga::auth::JwtBackend::from_jwks(jwt, &set)
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
+                return Ok(Authenticator::Jwt(Box::new(backend)));
+            }
+        }
+    }
+
+    Authenticator::from_config(&config.auth).map_err(|e| anyhow::anyhow!("authenticator: {e}"))
 }
 
 /// Parse `--config <path>` (default `config.toml`).
