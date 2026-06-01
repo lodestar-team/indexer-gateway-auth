@@ -1,0 +1,56 @@
+[package]
+name = "indexer-gateway-auth"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Authenticating reverse proxy for the Graph Protocol Indexer Management API"
+license = "Apache-2.0"
+repository = "https://github.com/lodestar-team/indexer-gateway-auth"
+readme = "README.md"
+keywords = ["graphprotocol", "indexer", "proxy", "auth", "graphql"]
+categories = ["network-programming", "authentication"]
+
+[[bin]]
+name = "indexer-gateway-auth"
+path = "src/main.rs"
+
+[lib]
+name = "iga"
+path = "src/lib.rs"
+
+[dependencies]
+# GraphQL operation classification (parse-only, never executes)
+async-graphql-parser = "7"
+async-graphql-value = "7"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Authentication
+jsonwebtoken = "9"
+subtle = "2"
+
+# Audit
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+sha2 = "0.10"
+hex = "0.4"
+
+# Async runtime, HTTP server and upstream client
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "http2"] }
+http = "1"
+http-body-util = "0.1"
+bytes = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "http2"] }
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Errors
+anyhow = "1"
+thiserror = "2"
+
+[dev-dependencies]

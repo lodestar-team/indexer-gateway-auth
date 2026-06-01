@@ -1,0 +1,54 @@
+# indexer-gateway-auth — example configuration.
+#
+# Secrets (static tokens, JWT keys) MUST be supplied via `env:NAME` references,
+# never inlined here. This file is safe to commit.
+
+listen  = "0.0.0.0:8400"
+metrics = "0.0.0.0:7300"
+
+[upstream]
+# All upstreams SHOULD bind to localhost / cluster-internal so the proxy is
+# their only reachable network path.
+agent_management  = "http://127.0.0.1:18000"
+graph_node_admin  = "http://127.0.0.1:8020"
+graph_node_status = "http://127.0.0.1:8030"
+
+[tls]
+enabled             = false
+# cert              = "/etc/iga/tls/cert.pem"
+# key               = "/etc/iga/tls/key.pem"
+require_client_cert = false        # set true for mTLS
+
+[auth]
+mode                 = "bearer"    # "bearer" | "jwt" | "mtls"
+allow_anonymous_read = false
+
+[[auth.tokens]]                    # static bearer backend
+name   = "ci-readonly"
+token  = "env:IGA_TOKEN_CI"
+scopes = ["read"]
+
+[[auth.tokens]]
+name   = "operator"
+token  = "env:IGA_TOKEN_OPERATOR"
+scopes = ["read", "write"]
+
+# Optional JWT backend (used when mode = "jwt").
+# [auth.jwt]
+# issuer       = "https://auth.example.com/"
+# audience     = "indexer-management"
+# jwks_url     = "https://auth.example.com/.well-known/jwks.json"
+# hs256_secret = "env:IGA_JWT_SECRET"   # for HS256 instead of JWKS
+# scopes_claim = "scopes"
+
+[policy]
+fail_closed_on_parse_error = true
+
+# Require a fine-grained scope for the most dangerous action.
+[[policy.override]]
+field          = "executeApprovedActions"
+require_scopes = ["actions:execute"]
+
+[ratelimit]
+write_per_minute = 30
+read_per_minute  = 600
